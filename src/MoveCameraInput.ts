@@ -6,6 +6,7 @@ type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 
 interface MoveCameraInputOptions {
   dragSpeed?: number;
+  edgeScrollEnabled?: boolean;
   edgeScrollSpeed?: number;
   edgeScrollThreshold?: number;
   bounds?: Bounds;
@@ -13,6 +14,7 @@ interface MoveCameraInputOptions {
 
 const DEFAULT_OPTIONS: Required<MoveCameraInputOptions> = {
   dragSpeed: 0.05,
+  edgeScrollEnabled: false,
   edgeScrollSpeed: 0.7,
   edgeScrollThreshold: 20,
   bounds: { minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity },
@@ -26,8 +28,9 @@ export default class MoveCameraInput
   private _isDragging: boolean = false;
   private _previousPosition: { x: number; y: number } | null = null;
   private _canvas: HTMLCanvasElement;
-  private _edgeScrollSpeed: number;
   private _dragSpeed: number;
+  private _edgeScrollEnabled: boolean;
+  private _edgeScrollSpeed: number;
   private _edgeThreshold: number;
   private _cursorPosition: { x: number; y: number } = { x: 0, y: 0 };
   private _edgeScrollInterval: BABYLON.Nullable<number> = null;
@@ -44,14 +47,16 @@ export default class MoveCameraInput
     this._canvas = canvas;
 
     const {
-      edgeScrollSpeed = DEFAULT_OPTIONS.edgeScrollSpeed,
       dragSpeed = DEFAULT_OPTIONS.dragSpeed,
+      edgeScrollEnabled = DEFAULT_OPTIONS.edgeScrollEnabled,
+      edgeScrollSpeed = DEFAULT_OPTIONS.edgeScrollSpeed,
       edgeScrollThreshold = DEFAULT_OPTIONS.edgeScrollThreshold,
       bounds = DEFAULT_OPTIONS.bounds,
     } = options;
 
-    this._edgeScrollSpeed = edgeScrollSpeed;
     this._dragSpeed = dragSpeed;
+    this._edgeScrollEnabled = edgeScrollEnabled;
+    this._edgeScrollSpeed = edgeScrollSpeed;
     this._edgeThreshold = edgeScrollThreshold;
     this._bounds = bounds;
   }
@@ -189,6 +194,7 @@ export default class MoveCameraInput
     if (!this.camera) return;
 
     this._edgeScrollInterval = window.setInterval(() => {
+      if (!this._edgeScrollEnabled) return;
       // console.log(this.camera?.position, this.camera?.target);
 
       // this._axesViewer?.update(

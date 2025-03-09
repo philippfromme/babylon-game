@@ -11,27 +11,41 @@ import MoveCameraInput from "./MoveCameraInput";
 import vertexShader from "./shaders/vertex.glsl";
 import fragmentShader from "./shaders/fragment.glsl";
 
+import HeightColorMaterialPlugin from "./materials/HeightColorMaterialPlugin";
+
 import GUI from "lil-gui";
 
 const gui = new GUI();
 
+interface CreateTerrainSettings {
+  frequency: number;
+  verticalHeight: number;
+  exponent: number;
+  layers: number;
+  terrainWidth: number;
+  vertexCount: number;
+  lightDirection: BABYLON.Vector3;
+  lowColor: string;
+  midColor: string;
+  highColor: string;
+}
+
 const settings = {
   frequency: 3,
-  amplitude: 2,
-  verticalHeight: 5,
+  verticalHeight: 10,
   exponent: 3,
   layers: 5,
   terrainWidth: 50,
   vertexCount: 200,
-  lowColor: "#0000ff",
+  lightDirection: new BABYLON.Vector3(-1, -1, -1),
+  lowColor: "#808080",
   midColor: "#808080",
-  highColor: "#ffffff",
+  highColor: "#808080",
 };
 
 const folder = gui.addFolder("Terrain Settings");
 
 folder.add(settings, "frequency", 1, 10).step(1);
-folder.add(settings, "amplitude", 1, 10).step(1);
 folder.add(settings, "verticalHeight", 1, 10).step(1);
 folder.add(settings, "exponent", 1, 10).step(1);
 folder.add(settings, "layers", 1, 10).step(1);
@@ -43,12 +57,6 @@ const colorsFolder = folder.addFolder("Colors");
 colorsFolder.addColor(settings, "lowColor");
 colorsFolder.addColor(settings, "midColor");
 colorsFolder.addColor(settings, "highColor");
-
-gui.onFinishChange((event) => {
-  const { property } = event;
-
-  console.log("event", event);
-});
 
 class App {
   terrain: BABYLON.Mesh | null = null;
@@ -72,19 +80,24 @@ class App {
 
     scene.clearColor = BABYLON.Color3.Black().toColor4(1);
 
-    this.terrain = createTerrain(scene);
+    this.terrain = createTerrain(scene, settings);
+
+    gui.onFinishChange((event) => {
+      this.terrain?.dispose();
+      this.terrain = createTerrain(scene, settings);
+    });
 
     // const axes = new AxesViewer(scene, 10);
 
     const light = new BABYLON.DirectionalLight(
       "DirectionalLight",
-      new BABYLON.Vector3(-1, -1, -1),
+      settings.lightDirection,
       scene
     );
 
     light.position = new BABYLON.Vector3(0, 10, 0);
 
-    light.intensity = 0.1;
+    light.intensity = 0.4;
 
     // hide/show the Inspector
     window.addEventListener("keydown", (ev) => {
@@ -112,18 +125,29 @@ class App {
 new App();
 
 async function createScene(canvas: HTMLCanvasElement, engine: BABYLON.Engine) {
-  var scene = new BABYLON.Scene(engine);
+  const scene = new BABYLON.Scene(engine);
 
   // create camera
-  var camera = createCamera(canvas, scene);
+  const camera = createCamera(canvas, scene);
 
-  var light = new BABYLON.HemisphericLight(
-    "light",
-    new BABYLON.Vector3(0, 1, 0),
+  // create directional light
+  const light = new BABYLON.DirectionalLight(
+    "DirectionalLight",
+    new BABYLON.Vector3(-1, -1, -1),
     scene
   );
 
-  light.intensity = 0.7;
+  light.intensity = 0.5;
+
+  // enable shadows
+  const shadowGenerator = new BABYLON.ShadowGenerator(1024, light);
+
+  // create ambient light
+  const ambientLight = new BABYLON.HemisphericLight(
+    "ambientLight",
+    new BABYLON.Vector3(0, 1, 0),
+    scene
+  );
 
   return scene;
 }
@@ -173,10 +197,18 @@ function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
   return camera;
 }
 
-function createTerrain(scene: BABYLON.Scene) {
-  const vertexCount = 200; // number of vertices per side
-  const terrainWidth = 50; // width of the terrain in x and z
-  const verticalHeight = 5; // height of the terrain in y
+function createTerrain(
+  scene: BABYLON.Scene,
+  settings: CreateTerrainSettings
+): BABYLON.Mesh {
+  const {
+    frequency,
+    verticalHeight,
+    exponent,
+    layers,
+    terrainWidth,
+    vertexCount,
+  } = settings;
 
   const noise2D = createNoise2D();
 
@@ -187,16 +219,13 @@ function createTerrain(scene: BABYLON.Scene) {
       const nx = x / vertexCount - 0.5;
       const ny = y / vertexCount - 0.5;
 
-      const frequency = 3;
-      const amplitude = 2;
-
-      let height = calculateHeight(amplitude, noise2D, frequency, nx, ny);
+      let height = calculateHeight(noise2D, frequency, nx, ny, layers);
 
       // normalize height
-      height = height / (amplitude + amplitude / 2 + amplitude / 4);
+      height = height / (1 + 1 / 2 + 1 / 4);
 
       // apply exponent
-      const exponent = 3; // higher values make the terrain flatter
+      // higher values make the terrain flatter
 
       heightmap[y * vertexCount + x] = Math.pow(height, exponent);
     }
@@ -273,63 +302,77 @@ function createTerrain(scene: BABYLON.Scene) {
   terrain.convertToFlatShadedMesh();
 
   // add material
-  // const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
-  // material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-  // material.specularColor = new BABYLON.Color3(0, 0, 0);
+  const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
+  material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+  material.specularColor = new BABYLON.Color3(0, 0, 0);
 
-  // terrain.material = material;
+  const myPlugin = new HeightColorMaterialPlugin(material);
+
+  terrain.material = material;
+
+  if (terrain.material && terrain.material.pluginManager) {
+    const plugin = terrain.material.pluginManager.getPlugin(
+      "HeightColor"
+    ) as HeightColorMaterialPlugin;
+
+    if (plugin) {
+      plugin.isEnabled = true;
+    }
+  }
 
   // create shader material
-  const shaderMaterial = new BABYLON.ShaderMaterial(
-    "shaderMaterial",
-    scene,
-    {
-      vertex: "custom",
-      fragment: "custom",
-    },
-    {
-      attributes: ["position", "normal"],
-      uniforms: [
-        "world",
-        "worldView",
-        "worldViewProjection",
-        "view",
-        "projection",
-      ],
-    }
-  );
+  // const shaderMaterial = new BABYLON.ShaderMaterial(
+  //   "shaderMaterial",
+  //   scene,
+  //   {
+  //     vertex: "custom",
+  //     fragment: "custom",
+  //   },
+  //   {
+  //     attributes: ["position", "normal"],
+  //     uniforms: [
+  //       "world",
+  //       "worldView",
+  //       "worldViewProjection",
+  //       "view",
+  //       "projection",
+  //     ],
+  //   }
+  // );
 
-  BABYLON.Effect.ShadersStore["customVertexShader"] = vertexShader;
+  // BABYLON.Effect.ShadersStore["customVertexShader"] = vertexShader;
 
-  BABYLON.Effect.ShadersStore["customFragmentShader"] = fragmentShader;
+  // BABYLON.Effect.ShadersStore["customFragmentShader"] = fragmentShader;
 
-  shaderMaterial.setFloat("minHeight", 0);
-  shaderMaterial.setFloat("maxHeight", verticalHeight);
+  // shaderMaterial.setFloat("minHeight", 0);
+  // shaderMaterial.setFloat("maxHeight", verticalHeight);
 
-  const lowColor = BABYLON.Color3.Blue();
-  const midColor = BABYLON.Color3.Gray();
-  const highColor = BABYLON.Color3.White();
+  // const lowColor = BABYLON.Color3.FromHexString(settings.lowColor);
+  // const midColor = BABYLON.Color3.FromHexString(settings.midColor);
+  // const highColor = BABYLON.Color3.FromHexString(settings.highColor);
 
-  shaderMaterial.setVector3(
-    "lowColor",
-    new BABYLON.Vector3(lowColor.r, lowColor.g, lowColor.b)
-  );
-  shaderMaterial.setVector3(
-    "midColor",
-    new BABYLON.Vector3(midColor.r, midColor.g, midColor.b)
-  );
-  shaderMaterial.setVector3(
-    "highColor",
-    new BABYLON.Vector3(highColor.r, highColor.g, highColor.b)
-  );
+  // shaderMaterial.setVector3(
+  //   "lowColor",
+  //   new BABYLON.Vector3(lowColor.r, lowColor.g, lowColor.b)
+  // );
+  // shaderMaterial.setVector3(
+  //   "midColor",
+  //   new BABYLON.Vector3(midColor.r, midColor.g, midColor.b)
+  // );
+  // shaderMaterial.setVector3(
+  //   "highColor",
+  //   new BABYLON.Vector3(highColor.r, highColor.g, highColor.b)
+  // );
 
-  terrain.material = shaderMaterial;
+  // // set light direction
+  // shaderMaterial.setVector3("lightDirection", settings.lightDirection);
+
+  // terrain.material = shaderMaterial;
 
   return terrain;
 }
 
 function calculateHeight(
-  amplitude: number,
   noise2D: NoiseFunction2D,
   frequency: number,
   nx: number,
@@ -340,7 +383,7 @@ function calculateHeight(
 
   for (let i = 0; i < layers; i++) {
     height +=
-      (amplitude / Math.pow(2, i)) *
+      (1 / Math.pow(2, i)) *
       map(
         noise2D(
           Math.pow(2, i) * frequency * nx,

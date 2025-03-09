@@ -6,9 +6,13 @@ uniform vec3 lowColor;
 uniform vec3 midColor;
 uniform vec3 highColor;
 
-varying vec3 vPosition;
+uniform vec3 lightDirection; // Direction of the light source (normalized)
+varying vec3 vPosition;      // Position of the vertex in world space
+varying vec3 vNormal;        // Normal of the vertex in world space
 
 void main() {
+
+  // determine color based on height
   float height = vPosition.y;
   float normalizedHeight = (height - minHeight) / (maxHeight - minHeight);
 
@@ -24,6 +28,13 @@ void main() {
     terrainColor = highColor;
   }
 
-  gl_FragColor = vec4(terrainColor, 1.0);
-}
+  // calculate diffuse lighting
+  vec3 normal = normalize(vNormal);       // Ensure normal is normalized
+  vec3 lightDir = normalize(lightDirection); // Ensure light direction is normalized
+  float diffuseIntensity = max(dot(normal, lightDir), 0.0); // Lambertian reflectance
 
+  // combine terrain color with lighting
+  vec3 finalColor = terrainColor * diffuseIntensity;
+
+  gl_FragColor = vec4(finalColor, 1.0);
+}
