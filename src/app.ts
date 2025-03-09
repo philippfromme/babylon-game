@@ -42,7 +42,7 @@ const defaultSettings: CreateTerrainSettings = {
   terrainHeight: 5,
   vertexCount: 200,
   lightDirection: { x: 0, y: 0 },
-  lightIntensity: 0.5,
+  lightIntensity: 0.7,
   ambientLightIntensity: 0.5,
   lowColor: "#0000ff",
   midColor: "#00ff00",
@@ -106,6 +106,16 @@ class App {
 
     // create camera
     const camera = createCamera(canvas, scene);
+
+    const defaultPipeline = new BABYLON.DefaultRenderingPipeline("default", true, scene, [camera]);
+
+    // enable fxaa
+    defaultPipeline.fxaaEnabled = true;
+
+    // enable grain
+    // defaultPipeline.grainEnabled = true;
+    // defaultPipeline.grain.intensity = 10;
+    // defaultPipeline.grain.animated = true;
 
     // create directional light
     const directionalLight = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(settings.lightDirection.x * 5, -1, settings.lightDirection.y * 5), scene);
