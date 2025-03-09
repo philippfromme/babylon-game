@@ -14,8 +14,7 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
       HeightColor: false,
     });
 
-    this._varColorName =
-      material instanceof BABYLON.PBRBaseMaterial ? "finalColor" : "color";
+    this._varColorName = material instanceof BABYLON.PBRBaseMaterial ? "finalColor" : "color";
 
     this._enable(true);
   }
@@ -35,11 +34,7 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
 
   // Also, you should always associate a define with your plugin because the list of defines (and their values)
   // is what triggers a recompilation of the shader: a shader is recompiled only if a value of a define changes.
-  prepareDefines(
-    defines: BABYLON.MaterialDefines,
-    scene: BABYLON.Scene,
-    mesh: BABYLON.AbstractMesh
-  ) {
+  prepareDefines(defines: BABYLON.MaterialDefines, scene: BABYLON.Scene, mesh: BABYLON.AbstractMesh) {
     defines["HeightColor"] = this._isEnabled;
   }
 
@@ -64,18 +59,10 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
 
   // whenever a material is bound to a mesh, we need to update the uniforms.
   // so bind our uniform variable to the actual color we have in the instance.
-  bindForSubMesh(
-    uniformBuffer: BABYLON.UniformBuffer,
-    scene: BABYLON.Scene,
-    engine: BABYLON.AbstractEngine,
-    subMesh: BABYLON.SubMesh
-  ) {
+  bindForSubMesh(uniformBuffer: BABYLON.UniformBuffer, scene: BABYLON.Scene, engine: BABYLON.AbstractEngine, subMesh: BABYLON.SubMesh) {
     if (this._isEnabled) {
       console.log("Binding lowColor");
-      uniformBuffer.updateColor3(
-        "lowColor",
-        HeightColorMaterialPlugin.lowColor
-      );
+      uniformBuffer.updateColor3("lowColor", HeightColorMaterialPlugin.lowColor);
     }
   }
 

@@ -20,9 +20,7 @@ const DEFAULT_OPTIONS: Required<MoveCameraInputOptions> = {
   bounds: { minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity },
 };
 
-export default class MoveCameraInput
-  implements BABYLON.ICameraInput<BABYLON.ArcRotateCamera>
-{
+export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.ArcRotateCamera> {
   camera: BABYLON.Nullable<BABYLON.ArcRotateCamera>;
   private _scene: BABYLON.Scene;
   private _isDragging: boolean = false;
@@ -37,11 +35,7 @@ export default class MoveCameraInput
   private _bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   // private _axesViewer?: AxesViewer;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    scene: BABYLON.Scene,
-    options: MoveCameraInputOptions = {}
-  ) {
+  constructor(canvas: HTMLCanvasElement, scene: BABYLON.Scene, options: MoveCameraInputOptions = {}) {
     this.camera = null;
     this._scene = scene;
     this._canvas = canvas;
@@ -154,16 +148,11 @@ export default class MoveCameraInput
     const dy = pointerInfo.event.clientY - this._previousPosition.y;
 
     // calculate movement in world space
-    const forward = this.camera
-      .getTarget()
-      .subtract(this.camera.position)
-      .normalize();
+    const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
 
     const right = BABYLON.Vector3.Cross(forward, this.camera.upVector);
 
-    let movement = right
-      .scale(-dx * this._dragSpeed)
-      .add(forward.scale(-dy * this._dragSpeed));
+    let movement = right.scale(-dx * this._dragSpeed).add(forward.scale(-dy * this._dragSpeed));
 
     // opposite direction
     movement = movement.scale(-1);
@@ -208,24 +197,12 @@ export default class MoveCameraInput
 
       const canvasRect = this._canvas.getBoundingClientRect();
 
-      const dx =
-        x < canvasRect.left + this._edgeThreshold
-          ? this._edgeScrollSpeed
-          : x > canvasRect.right - this._edgeThreshold
-          ? -this._edgeScrollSpeed
-          : 0;
+      const dx = x < canvasRect.left + this._edgeThreshold ? this._edgeScrollSpeed : x > canvasRect.right - this._edgeThreshold ? -this._edgeScrollSpeed : 0;
 
-      const dz =
-        y < canvasRect.top + this._edgeThreshold
-          ? this._edgeScrollSpeed
-          : y > canvasRect.bottom - this._edgeThreshold
-          ? -this._edgeScrollSpeed
-          : 0;
+      const dz = y < canvasRect.top + this._edgeThreshold ? this._edgeScrollSpeed : y > canvasRect.bottom - this._edgeThreshold ? -this._edgeScrollSpeed : 0;
 
       if (dx !== 0 || dz !== 0) {
-        const forward = this.camera!.getTarget()
-          .subtract(this.camera!.position)
-          .normalize();
+        const forward = this.camera!.getTarget().subtract(this.camera!.position).normalize();
         const right = BABYLON.Vector3.Cross(forward, this.camera!.upVector);
 
         const movement = right.scale(dx).add(forward.scale(dz));
@@ -241,11 +218,6 @@ export default class MoveCameraInput
   }
 
   private _isInBounds(position: BABYLON.Vector3): boolean {
-    return (
-      position.x >= this._bounds.minX &&
-      position.x <= this._bounds.maxX &&
-      position.z >= this._bounds.minZ &&
-      position.z <= this._bounds.maxZ
-    );
+    return position.x >= this._bounds.minX && position.x <= this._bounds.maxX && position.z >= this._bounds.minZ && position.z <= this._bounds.maxZ;
   }
 }

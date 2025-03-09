@@ -89,11 +89,7 @@ class App {
 
     // const axes = new AxesViewer(scene, 10);
 
-    const light = new BABYLON.DirectionalLight(
-      "DirectionalLight",
-      settings.lightDirection,
-      scene
-    );
+    const light = new BABYLON.DirectionalLight("DirectionalLight", settings.lightDirection, scene);
 
     light.position = new BABYLON.Vector3(0, 10, 0);
 
@@ -102,12 +98,7 @@ class App {
     // hide/show the Inspector
     window.addEventListener("keydown", (ev) => {
       // Shift+Ctrl+Alt+I
-      if (
-        ev.shiftKey &&
-        ev.ctrlKey &&
-        ev.altKey &&
-        (ev.key === "I" || ev.key === "i")
-      ) {
+      if (ev.shiftKey && ev.ctrlKey && ev.altKey && (ev.key === "I" || ev.key === "i")) {
         if (scene.debugLayer.isVisible()) {
           scene.debugLayer.hide();
         } else {
@@ -131,11 +122,7 @@ async function createScene(canvas: HTMLCanvasElement, engine: BABYLON.Engine) {
   const camera = createCamera(canvas, scene);
 
   // create directional light
-  const light = new BABYLON.DirectionalLight(
-    "DirectionalLight",
-    new BABYLON.Vector3(-1, -1, -1),
-    scene
-  );
+  const light = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(-1, -1, -1), scene);
 
   light.intensity = 0.5;
 
@@ -143,11 +130,7 @@ async function createScene(canvas: HTMLCanvasElement, engine: BABYLON.Engine) {
   const shadowGenerator = new BABYLON.ShadowGenerator(1024, light);
 
   // create ambient light
-  const ambientLight = new BABYLON.HemisphericLight(
-    "ambientLight",
-    new BABYLON.Vector3(0, 1, 0),
-    scene
-  );
+  const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
 
   return scene;
 }
@@ -197,18 +180,8 @@ function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
   return camera;
 }
 
-function createTerrain(
-  scene: BABYLON.Scene,
-  settings: CreateTerrainSettings
-): BABYLON.Mesh {
-  const {
-    frequency,
-    verticalHeight,
-    exponent,
-    layers,
-    terrainWidth,
-    vertexCount,
-  } = settings;
+function createTerrain(scene: BABYLON.Scene, settings: CreateTerrainSettings): BABYLON.Mesh {
+  const { frequency, verticalHeight, exponent, layers, terrainWidth, vertexCount } = settings;
 
   const noise2D = createNoise2D();
 
@@ -240,20 +213,8 @@ function createTerrain(
   for (let y = 0; y < vertexCount; y++) {
     for (let x = 0; x < vertexCount; x++) {
       // map x and y to the actual vertex position taking into account the terrain width
-      const vertexX = map(
-        x,
-        0,
-        vertexCount - 1,
-        -terrainWidth / 2,
-        terrainWidth / 2
-      );
-      const vertexY = map(
-        y,
-        0,
-        vertexCount - 1,
-        -terrainWidth / 2,
-        terrainWidth / 2
-      );
+      const vertexX = map(x, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
+      const vertexY = map(y, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
 
       // console.log("x", x, "y", y, "nx", vertexX, "ny", vertexY);
 
@@ -268,17 +229,9 @@ function createTerrain(
       positions.push(vertexX, height, vertexY);
 
       if (x < vertexCount - 1 && y < vertexCount - 1) {
-        indices.push(
-          y * vertexCount + x,
-          y * vertexCount + x + 1,
-          (y + 1) * vertexCount + x
-        );
+        indices.push(y * vertexCount + x, y * vertexCount + x + 1, (y + 1) * vertexCount + x);
 
-        indices.push(
-          (y + 1) * vertexCount + x,
-          y * vertexCount + x + 1,
-          (y + 1) * vertexCount + x + 1
-        );
+        indices.push((y + 1) * vertexCount + x, y * vertexCount + x + 1, (y + 1) * vertexCount + x + 1);
       }
     }
   }
@@ -311,9 +264,7 @@ function createTerrain(
   terrain.material = material;
 
   if (terrain.material && terrain.material.pluginManager) {
-    const plugin = terrain.material.pluginManager.getPlugin(
-      "HeightColor"
-    ) as HeightColorMaterialPlugin;
+    const plugin = terrain.material.pluginManager.getPlugin("HeightColor") as HeightColorMaterialPlugin;
 
     if (plugin) {
       plugin.isEnabled = true;
@@ -372,28 +323,11 @@ function createTerrain(
   return terrain;
 }
 
-function calculateHeight(
-  noise2D: NoiseFunction2D,
-  frequency: number,
-  nx: number,
-  ny: number,
-  layers = 5
-) {
+function calculateHeight(noise2D: NoiseFunction2D, frequency: number, nx: number, ny: number, layers = 5) {
   let height = 0;
 
   for (let i = 0; i < layers; i++) {
-    height +=
-      (1 / Math.pow(2, i)) *
-      map(
-        noise2D(
-          Math.pow(2, i) * frequency * nx,
-          Math.pow(2, i) * frequency * ny
-        ),
-        -1,
-        1,
-        0,
-        1
-      );
+    height += (1 / Math.pow(2, i)) * map(noise2D(Math.pow(2, i) * frequency * nx, Math.pow(2, i) * frequency * ny), -1, 1, 0, 1);
   }
 
   return height;
@@ -406,22 +340,13 @@ function debugMesh(mesh: BABYLON.Mesh, scene: BABYLON.Scene) {
 
   BABYLON.MeshDebugPluginMaterial.PrepareMeshForTrianglesAndVerticesMode(mesh);
 
-  new BABYLON.MeshDebugPluginMaterial(
-    mesh.material as BABYLON.StandardMaterial,
-    {
-      mode: BABYLON.MeshDebugMode.TRIANGLES,
-      wireframeTrianglesColor: new BABYLON.Color3(0, 0, 0),
-      wireframeThickness: 0.7,
-    }
-  );
+  new BABYLON.MeshDebugPluginMaterial(mesh.material as BABYLON.StandardMaterial, {
+    mode: BABYLON.MeshDebugMode.TRIANGLES,
+    wireframeTrianglesColor: new BABYLON.Color3(0, 0, 0),
+    wireframeThickness: 0.7,
+  });
 }
 
-function map(
-  value: number,
-  fromMin: number,
-  fromMax: number,
-  toMin: number,
-  toMax: number
-): number {
+function map(value: number, fromMin: number, fromMax: number, toMin: number, toMax: number): number {
   return toMin + (toMax - toMin) * ((value - fromMin) / (fromMax - fromMin));
 }
