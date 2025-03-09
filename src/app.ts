@@ -35,13 +35,13 @@ interface CreateTerrainSettings {
 }
 
 const defaultSettings: CreateTerrainSettings = {
-  frequency: 3,
+  frequency: 2,
   exponent: 3,
-  octaves: 5,
+  octaves: 10,
   terrainWidth: 50,
-  terrainHeight: 5,
-  vertexCount: 200,
-  lightDirection: { x: 0, y: 0 },
+  terrainHeight: 10,
+  vertexCount: 500,
+  lightDirection: { x: 0.5, y: 0.5 },
   lightIntensity: 0.7,
   ambientLightIntensity: 0.5,
   lowColor: "#0000ff",
@@ -131,6 +131,7 @@ class App {
 
     // add material
     const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
+
     material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
     material.specularColor = new BABYLON.Color3(0, 0, 0);
 
@@ -141,7 +142,16 @@ class App {
     heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
     heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
-    this.terrain = createTerrain(scene, material, settings);
+    const terrain = (this.terrain = createTerrain(scene, material, settings));
+
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
+
+    shadowGenerator.usePoissonSampling = true;
+    shadowGenerator.usePercentageCloserFiltering = true;
+    shadowGenerator.addShadowCaster(terrain, true);
+    shadowGenerator.getShadowMap()?.renderList?.push(terrain);
+
+    terrain.receiveShadows = true;
 
     const reset = () => {
       const newSettings = { ...defaultSettings };
@@ -171,7 +181,7 @@ class App {
       folder.add(settings, "octaves", 1, 10).step(1);
       folder.add(settings, "terrainWidth", 10, 100).step(10);
       folder.add(settings, "terrainHeight", 1, 100).step(1);
-      folder.add(settings, "vertexCount", 10, 500).step(10);
+      folder.add(settings, "vertexCount", 10, 1000).step(10);
 
       const colorsFolder = gui.addFolder("Colors");
 
@@ -373,7 +383,7 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
   // debugMesh(terrain, scene);
 
   // convert to flat shaded mesh
-  terrain.convertToFlatShadedMesh();
+  // terrain.convertToFlatShadedMesh();
 
   terrain.material = material;
 
