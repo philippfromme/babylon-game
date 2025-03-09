@@ -9,7 +9,7 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
   highColor = new BABYLON.Color3(1.0, 0.0, 0.0);
 
   minHeight = 0;
-  maxHeight = 10;
+  maxHeight = 1;
 
   constructor(material: BABYLON.Material) {
     // the second parameter is the name of this plugin.
@@ -41,6 +41,11 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
     this.lowColor.copyFrom(lowColor);
     this.midColor.copyFrom(midColor);
     this.highColor.copyFrom(highColor);
+  }
+
+  setHeightRange(minHeight: number, maxHeight: number) {
+    this.minHeight = minHeight;
+    this.maxHeight = maxHeight;
   }
 
   // Also, you should always associate a define with your plugin because the list of defines (and their values)
