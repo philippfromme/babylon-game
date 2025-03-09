@@ -142,16 +142,15 @@ class App {
     heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
     heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
-    const terrain = (this.terrain = createTerrain(scene, material, settings));
+    this.terrain = createTerrain(scene, material, settings);
 
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
 
     shadowGenerator.usePoissonSampling = true;
     shadowGenerator.usePercentageCloserFiltering = true;
-    shadowGenerator.addShadowCaster(terrain, true);
-    shadowGenerator.getShadowMap()?.renderList?.push(terrain);
 
-    terrain.receiveShadows = true;
+    shadowGenerator.addShadowCaster(this.terrain, true);
+    shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
 
     const reset = () => {
       const newSettings = { ...defaultSettings };
@@ -163,10 +162,14 @@ class App {
       setupGUI();
 
       this.terrain?.dispose();
+
       this.terrain = createTerrain(scene, material, settings);
 
       heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
       heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+
+      shadowGenerator.addShadowCaster(this.terrain, true);
+      shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
     };
 
     const setupGUI = () => {
@@ -261,13 +264,13 @@ function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
     "Camera", // name
     0, // alpha
     0, // beta
-    10, // radius
-    new BABYLON.Vector3(0, 0, 0),
+    25, // radius
+    new BABYLON.Vector3(0, 0, 5),
     scene
   );
 
   // overwrite alpha, beta, radius
-  camera.setPosition(new BABYLON.Vector3(0, 0, 20));
+  camera.setPosition(new BABYLON.Vector3(0, 50, 50));
 
   // attach camera to canvas
   camera.attachControl(canvas, true);
@@ -322,7 +325,6 @@ function createHeightMap(frequency: number, exponent: number, octaves: number, v
 
       // apply exponent
       // higher values make the terrain flatter
-
       heightmap[y * vertexCount + x] = Math.pow(height, exponent);
     }
   }
@@ -401,6 +403,8 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
   // terrain.convertToFlatShadedMesh();
 
   terrain.material = material;
+
+  terrain.receiveShadows = true;
 
   return terrain;
 }
