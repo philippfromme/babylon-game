@@ -170,7 +170,7 @@ class App {
       folder.add(settings, "exponent", 1, 10).step(1);
       folder.add(settings, "octaves", 1, 10).step(1);
       folder.add(settings, "terrainWidth", 10, 100).step(10);
-      folder.add(settings, "terrainHeight", 1, 10).step(1);
+      folder.add(settings, "terrainHeight", 1, 100).step(1);
       folder.add(settings, "vertexCount", 10, 500).step(10);
 
       const colorsFolder = gui.addFolder("Colors");
@@ -202,7 +202,7 @@ class App {
           this.terrain = createTerrain(scene, material, settings);
         }
 
-        if (property === "maxHeight") {
+        if (property === "terrainHeight") {
           heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
         }
 
