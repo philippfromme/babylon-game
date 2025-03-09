@@ -351,6 +351,21 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
 
       let height = heightMap[y * vertexCount + x];
 
+      const island = true;
+
+      if (island) {
+        // ensure water at the edges
+        const nx = map(Math.abs(vertexX), 0, terrainWidth / 2, 0, 1);
+        const ny = map(Math.abs(vertexY), 0, terrainWidth / 2, 0, 1);
+
+        // Use a power function to create a more gradual transition
+        const easeEdge = (value: number) => Math.pow(value, 3);
+
+        const edgeFactor = easeEdge(Math.max(nx, ny));
+
+        height = lerp(height, 0, edgeFactor);
+      }
+
       // map height to terrainHeight
       height = map(height, 0, 1, 0, terrainHeight);
 
@@ -416,4 +431,8 @@ function debugMesh(mesh: BABYLON.Mesh, scene: BABYLON.Scene) {
 
 function map(value: number, fromMin: number, fromMax: number, toMin: number, toMax: number): number {
   return toMin + (toMax - toMin) * ((value - fromMin) / (fromMax - fromMin));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
