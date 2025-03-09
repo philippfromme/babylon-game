@@ -38,9 +38,9 @@ const settings = {
   terrainWidth: 50,
   vertexCount: 200,
   lightDirection: new BABYLON.Vector3(-1, -1, -1),
-  lowColor: "#808080",
-  midColor: "#808080",
-  highColor: "#808080",
+  lowColor: "#0000ff",
+  midColor: "#00ff00",
+  highColor: "#ff0000",
 };
 
 const folder = gui.addFolder("Terrain Settings");
@@ -80,11 +80,28 @@ class App {
 
     scene.clearColor = BABYLON.Color3.Black().toColor4(1);
 
-    this.terrain = createTerrain(scene, settings);
+    // add material
+    const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
+    material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+    material.specularColor = new BABYLON.Color3(0, 0, 0);
+
+    const heightColorMaterialPlugin = new HeightColorMaterialPlugin(material);
+
+    heightColorMaterialPlugin.isEnabled = true;
+
+    this.terrain = createTerrain(scene, material, settings);
 
     gui.onFinishChange((event) => {
-      this.terrain?.dispose();
-      this.terrain = createTerrain(scene, settings);
+      const { property } = event;
+
+      if (["frequency", "verticalHeight", "exponent", "layers", "terrainWidth", "vertexCount"].includes(property)) {
+        this.terrain?.dispose();
+        this.terrain = createTerrain(scene, material, settings);
+      }
+
+      if (["lowColor", "midColor", "highColor"].includes(property)) {
+        heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
+      }
     });
 
     // const axes = new AxesViewer(scene, 10);
@@ -180,7 +197,7 @@ function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
   return camera;
 }
 
-function createTerrain(scene: BABYLON.Scene, settings: CreateTerrainSettings): BABYLON.Mesh {
+function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, settings: CreateTerrainSettings): BABYLON.Mesh {
   const { frequency, verticalHeight, exponent, layers, terrainWidth, vertexCount } = settings;
 
   const noise2D = createNoise2D();
@@ -254,22 +271,7 @@ function createTerrain(scene: BABYLON.Scene, settings: CreateTerrainSettings): B
   // convert to flat shaded mesh
   terrain.convertToFlatShadedMesh();
 
-  // add material
-  const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
-  material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-  material.specularColor = new BABYLON.Color3(0, 0, 0);
-
-  const myPlugin = new HeightColorMaterialPlugin(material);
-
   terrain.material = material;
-
-  if (terrain.material && terrain.material.pluginManager) {
-    const plugin = terrain.material.pluginManager.getPlugin("HeightColor") as HeightColorMaterialPlugin;
-
-    if (plugin) {
-      plugin.isEnabled = true;
-    }
-  }
 
   // create shader material
   // const shaderMaterial = new BABYLON.ShaderMaterial(

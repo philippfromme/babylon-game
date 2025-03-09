@@ -4,7 +4,12 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
   _isEnabled: boolean = false;
   private _varColorName: string;
 
-  static lowColor = new BABYLON.Color3(0.0, 0.0, 1.0);
+  lowColor = new BABYLON.Color3(0.0, 0.0, 1.0);
+  midColor = new BABYLON.Color3(0.0, 1.0, 0.0);
+  highColor = new BABYLON.Color3(1.0, 0.0, 0.0);
+
+  minHeight = 0;
+  maxHeight = 10;
 
   constructor(material: BABYLON.Material) {
     // the second parameter is the name of this plugin.
@@ -32,6 +37,12 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
     this._enable(this._isEnabled);
   }
 
+  setColors(lowColor: BABYLON.Color3, midColor: BABYLON.Color3, highColor: BABYLON.Color3) {
+    this.lowColor.copyFrom(lowColor);
+    this.midColor.copyFrom(midColor);
+    this.highColor.copyFrom(highColor);
+  }
+
   // Also, you should always associate a define with your plugin because the list of defines (and their values)
   // is what triggers a recompilation of the shader: a shader is recompiled only if a value of a define changes.
   prepareDefines(defines: BABYLON.MaterialDefines, scene: BABYLON.Scene, mesh: BABYLON.AbstractMesh) {
@@ -50,9 +61,20 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
     fragment?: string;
   } {
     return {
-      ubo: [{ name: "lowColor", size: 3, type: "vec3" }],
+      ubo: [
+        { name: "lowColor", size: 3, type: "vec3" },
+        { name: "midColor", size: 3, type: "vec3" },
+        { name: "highColor", size: 3, type: "vec3" },
+        { name: "minHeight", size: 1, type: "float" },
+        { name: "maxHeight", size: 1, type: "float" },
+      ],
       fragment: `#ifdef HeightColor
                     uniform vec3 lowColor;
+                    uniform vec3 midColor;
+                    uniform vec3 highColor;
+
+                    uniform float minHeight;
+                    uniform float maxHeight;
                 #endif`,
     };
   }
@@ -61,8 +83,11 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
   // so bind our uniform variable to the actual color we have in the instance.
   bindForSubMesh(uniformBuffer: BABYLON.UniformBuffer, scene: BABYLON.Scene, engine: BABYLON.AbstractEngine, subMesh: BABYLON.SubMesh) {
     if (this._isEnabled) {
-      console.log("Binding lowColor");
-      uniformBuffer.updateColor3("lowColor", HeightColorMaterialPlugin.lowColor);
+      uniformBuffer.updateColor3("lowColor", this.lowColor);
+      uniformBuffer.updateColor3("midColor", this.midColor);
+      uniformBuffer.updateColor3("highColor", this.highColor);
+      uniformBuffer.updateFloat("minHeight", this.minHeight);
+      uniformBuffer.updateFloat("maxHeight", this.maxHeight);
     }
   }
 
@@ -90,7 +115,21 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
       return {
         CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
                 #ifdef HeightColor
-                    ${this._varColorName}.rgb *= lowColor;
+                    float height = vPositionW.y; // Assuming Y is the up axis
+                    float normalizedHeight = (height - minHeight) / (maxHeight - minHeight);
+                    vec3 colorResult;
+
+                    if (normalizedHeight < 0.33) {
+                      float t = normalizedHeight / 0.33;
+                      colorResult = mix(lowColor, midColor, t);
+                    } else if (normalizedHeight < 0.66) {
+                      float t = (normalizedHeight - 0.33) / 0.33;
+                      colorResult = mix(midColor, highColor, t);
+                    } else {
+                      colorResult = highColor;
+                    }
+
+                    ${this._varColorName}.rgb *= colorResult;
                 #endif
             `,
 
