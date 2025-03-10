@@ -142,6 +142,79 @@ class App {
     heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
     heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
+    // simple solution to create a terrain
+    const ground1 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+      "1",
+      "img/ASTGTMV003_N41E008.1.jpg",
+      {
+        width: 50,
+        height: 50,
+        subdivisions: 1000,
+        maxHeight: 3,
+        onReady: (mesh) => {
+          mesh.convertToFlatShadedMesh();
+        },
+      },
+      scene
+    );
+
+    const ground2 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+      "2",
+      "img/ASTGTMV003_N41E009.1.jpg",
+      {
+        width: 50,
+        height: 50,
+        subdivisions: 1000,
+        maxHeight: 3,
+        onReady: (mesh) => {
+          mesh.convertToFlatShadedMesh();
+        },
+      },
+      scene
+    );
+
+    ground2.position.x = 50;
+
+    const ground3 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+      "3",
+      "img/ASTGTMV003_N42E008.1.jpg",
+      {
+        width: 50,
+        height: 50,
+        subdivisions: 1000,
+        maxHeight: 3,
+        onReady: (mesh) => {
+          mesh.convertToFlatShadedMesh();
+        },
+      },
+      scene
+    );
+
+    ground3.position.z = 50;
+
+    const ground4 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+      "4",
+      "img/ASTGTMV003_N42E009.1.jpg",
+      {
+        width: 50,
+        height: 50,
+        subdivisions: 1000,
+        maxHeight: 3,
+        onReady: (mesh) => {
+          mesh.convertToFlatShadedMesh();
+        },
+      },
+      scene
+    );
+
+    ground4.position.x = 50;
+    ground4.position.z = 50;
+
+    ground1.material = material;
+    ground2.material = material;
+    ground3.material = material;
+    ground4.material = material;
+
     this.terrain = createTerrain(scene, material, settings);
 
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
@@ -163,13 +236,13 @@ class App {
 
       this.terrain?.dispose();
 
-      this.terrain = createTerrain(scene, material, settings);
+      // this.terrain = createTerrain(scene, material, settings);
 
-      heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
-      heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+      // heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
+      // heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
-      shadowGenerator.addShadowCaster(this.terrain, true);
-      shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
+      // shadowGenerator.addShadowCaster(this.terrain, true);
+      // shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
     };
 
     const setupGUI = () => {
@@ -440,3 +513,48 @@ function map(value: number, fromMin: number, fromMax: number, toMin: number, toM
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
+
+function loadHeightMap(imageUrl: string, width: number, height: number, callback: (heightMap: Float32Array) => void) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const img = new Image();
+
+  img.onload = () => {
+    // Set canvas dimensions to match the desired heightmap resolution
+    canvas.width = width;
+    canvas.height = height;
+
+    // Draw the image onto the canvas
+    ctx!.drawImage(img, 0, 0, width, height);
+
+    // Get pixel data from the canvas
+    const imageData = ctx!.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+
+    // Create a Float32Array to store normalized height values
+    const heights = new Float32Array(width * height);
+
+    // Loop through each pixel and calculate grayscale value
+    for (let i = 0; i < pixels.length; i += 4) {
+      // Extract RGB values (assuming the image is grayscale)
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+
+      // Calculate grayscale intensity (normalized to [0, 1])
+      const grayValue = (r + g + b) / (3 * 255);
+
+      // Store in the Float32Array
+      heights[i / 4] = grayValue;
+    }
+
+    callback(heights);
+  };
+
+  img.src = imageUrl;
+}
+
+// Example usage:
+loadHeightMap("img/heightmap.jpg", 256, 256, (heightMap) => {
+  console.log(heightMap); // Float32Array of normalized values
+});
