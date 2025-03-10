@@ -49,6 +49,14 @@ const defaultSettings: CreateTerrainSettings = {
   highColor: "#ff0000",
 };
 
+const defaultCameraSettings = {
+  alpha: 0,
+  beta: Math.PI / 4,
+  radius: 25,
+  target: new BABYLON.Vector3(0, 0, 5),
+  position: new BABYLON.Vector3(0, 50, 50),
+};
+
 const settings: CreateTerrainSettings = { ...defaultSettings };
 
 if (localStorage.getItem("babylon-game-settings")) {
@@ -142,79 +150,6 @@ class App {
     heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
     heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
-    // simple solution to create a terrain
-    const ground1 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
-      "1",
-      "img/ASTGTMV003_N41E008.1.jpg",
-      {
-        width: 50,
-        height: 50,
-        subdivisions: 1000,
-        maxHeight: 3,
-        onReady: (mesh) => {
-          mesh.convertToFlatShadedMesh();
-        },
-      },
-      scene
-    );
-
-    const ground2 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
-      "2",
-      "img/ASTGTMV003_N41E009.1.jpg",
-      {
-        width: 50,
-        height: 50,
-        subdivisions: 1000,
-        maxHeight: 3,
-        onReady: (mesh) => {
-          mesh.convertToFlatShadedMesh();
-        },
-      },
-      scene
-    );
-
-    ground2.position.x = 50;
-
-    const ground3 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
-      "3",
-      "img/ASTGTMV003_N42E008.1.jpg",
-      {
-        width: 50,
-        height: 50,
-        subdivisions: 1000,
-        maxHeight: 3,
-        onReady: (mesh) => {
-          mesh.convertToFlatShadedMesh();
-        },
-      },
-      scene
-    );
-
-    ground3.position.z = 50;
-
-    const ground4 = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
-      "4",
-      "img/ASTGTMV003_N42E009.1.jpg",
-      {
-        width: 50,
-        height: 50,
-        subdivisions: 1000,
-        maxHeight: 3,
-        onReady: (mesh) => {
-          mesh.convertToFlatShadedMesh();
-        },
-      },
-      scene
-    );
-
-    ground4.position.x = 50;
-    ground4.position.z = 50;
-
-    ground1.material = material;
-    ground2.material = material;
-    ground3.material = material;
-    ground4.material = material;
-
     this.terrain = createTerrain(scene, material, settings);
 
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
@@ -236,13 +171,20 @@ class App {
 
       this.terrain?.dispose();
 
-      // this.terrain = createTerrain(scene, material, settings);
+      this.terrain = createTerrain(scene, material, settings);
 
-      // heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
-      // heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+      heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
+      heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
 
-      // shadowGenerator.addShadowCaster(this.terrain, true);
-      // shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
+      shadowGenerator.addShadowCaster(this.terrain, true);
+      shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
+
+      // set camera to default settings
+      camera.alpha = defaultCameraSettings.alpha;
+      camera.beta = defaultCameraSettings.beta;
+      camera.radius = defaultCameraSettings.radius;
+      camera.setTarget(defaultCameraSettings.target.clone());
+      camera.setPosition(defaultCameraSettings.position.clone());
     };
 
     const setupGUI = () => {
@@ -335,21 +277,18 @@ new App();
 function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
   const camera = new BABYLON.ArcRotateCamera(
     "Camera", // name
-    0, // alpha
-    0, // beta
-    25, // radius
-    new BABYLON.Vector3(0, 0, 5),
+    defaultCameraSettings.alpha, // alpha
+    defaultCameraSettings.beta, // beta
+    defaultCameraSettings.radius, // radius
+    defaultCameraSettings.target.clone(), // target
     scene
   );
 
   // overwrite alpha, beta, radius
-  camera.setPosition(new BABYLON.Vector3(0, 50, 50));
+  camera.setPosition(defaultCameraSettings.position);
 
   // attach camera to canvas
   camera.attachControl(canvas, true);
-
-  // initial camera beta angle
-  camera.beta = Math.PI / 4;
 
   camera.lowerBetaLimit = 0.1;
   camera.upperBetaLimit = (Math.PI / 2) * 0.9;
