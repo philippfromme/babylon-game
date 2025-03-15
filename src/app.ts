@@ -1,25 +1,31 @@
 import * as BABYLON from "@babylonjs/core";
 
 import "@babylonjs/core/Debug/debugLayer";
-import { AxesViewer } from "@babylonjs/core/Debug/axesViewer";
 import "@babylonjs/inspector";
 
-import { createNoise2D, NoiseFunction2D } from "simplex-noise";
+import { MathUtils } from "three";
 
-import alea from "alea";
+import { createDummyTexture } from "./materials/dummyTexture";
+import { COLOR_MAPS, createRawTextureFromColorMap } from "./materials/fromColorMap";
+import { createRawTextureFromNoise2DData } from "./materials/fromNoise";
 
-import MoveCameraInput from "./MoveCameraInput";
+import { createRTSCamera, DEFAULT_RTS_CAMERA_SETTINGS } from "./cameras/RTSCamera";
+import RTSCameraInput from "./cameras/RTSCameraInput";
 
 import HeightColorMaterialPlugin from "./materials/HeightColorMaterialPlugin";
+
+import { createNoise2DData } from "./utils/noise";
 
 import { GUI } from "./lil-gui/XYController";
 
 let gui: GUI | null = null;
 
 interface CreateTerrainSettings {
-  frequency: number;
+  scale: number;
   exponent: number;
   octaves: number;
+  lacunarity?: number;
+  persistence?: number;
   terrainWidth: number;
   terrainHeight: number;
   vertexCount: number;
@@ -29,32 +35,22 @@ interface CreateTerrainSettings {
   };
   lightIntensity?: number;
   ambientLightIntensity?: number;
-  lowColor: string;
-  midColor: string;
-  highColor: string;
+  waterLevel?: number;
 }
 
 const defaultSettings: CreateTerrainSettings = {
-  frequency: 2,
+  scale: 1.5,
   exponent: 3,
   octaves: 10,
+  lacunarity: 2,
+  persistence: 0.5,
   terrainWidth: 50,
   terrainHeight: 10,
-  vertexCount: 500,
+  vertexCount: 200,
   lightDirection: { x: 0.5, y: 0.5 },
   lightIntensity: 0.7,
   ambientLightIntensity: 0.5,
-  lowColor: "#0000ff",
-  midColor: "#00ff00",
-  highColor: "#ff0000",
-};
-
-const defaultCameraSettings = {
-  alpha: 0,
-  beta: Math.PI / 4,
-  radius: 25,
-  target: new BABYLON.Vector3(0, 0, 5),
-  position: new BABYLON.Vector3(0, 50, 50),
+  waterLevel: 0.7,
 };
 
 const settings: CreateTerrainSettings = { ...defaultSettings };
@@ -64,6 +60,8 @@ if (localStorage.getItem("babylon-game-settings")) {
 
   try {
     newSettings = JSON.parse(localStorage.getItem("babylon-game-settings")!);
+
+    newSettings = { ...defaultSettings, ...newSettings };
   } catch (error) {
     console.error("Error parsing settings", error);
 
@@ -78,22 +76,23 @@ if (localStorage.getItem("babylon-game-settings")) {
 }
 
 function updateSettings(newSettings: CreateTerrainSettings) {
-  settings.frequency = newSettings.frequency;
+  settings.scale = newSettings.scale;
   settings.exponent = newSettings.exponent;
   settings.octaves = newSettings.octaves;
+  settings.lacunarity = newSettings.lacunarity;
+  settings.persistence = newSettings.persistence;
   settings.terrainWidth = newSettings.terrainWidth;
   settings.terrainHeight = newSettings.terrainHeight;
   settings.vertexCount = newSettings.vertexCount;
   settings.lightDirection = { ...newSettings.lightDirection };
   settings.lightIntensity = newSettings.lightIntensity;
   settings.ambientLightIntensity = newSettings.ambientLightIntensity;
-  settings.lowColor = newSettings.lowColor;
-  settings.midColor = newSettings.midColor;
-  settings.highColor = newSettings.highColor;
+  settings.waterLevel = newSettings.waterLevel;
 }
 
 class App {
   terrain: BABYLON.Mesh | null = null;
+  water: BABYLON.Mesh | null = null;
 
   constructor() {
     this.init();
@@ -112,13 +111,29 @@ class App {
 
     const scene = new BABYLON.Scene(engine);
 
-    // create camera
-    const camera = createCamera(canvas, scene);
+    if (localStorage.getItem("babylon-show-inspector") === "true") {
+      scene.debugLayer.show();
+    }
 
-    const defaultPipeline = new BABYLON.DefaultRenderingPipeline("default", true, scene, [camera]);
+    window.addEventListener("keydown", (event) => {
+      // Shift+Ctrl+Alt+I
+      if (event.shiftKey && event.ctrlKey && event.altKey && (event.key === "I" || event.key === "i")) {
+        if (scene.debugLayer.isVisible()) {
+          localStorage.setItem("babylon-show-inspector", "false");
+        } else {
+          localStorage.setItem("babylon-show-inspector", "true");
+        }
+      }
+    });
+
+    const rtsCamera = createRTSCamera(canvas, scene);
+
+    const rtsCameraInput = rtsCamera.inputs.attached["RTSCameraInput"] as RTSCameraInput;
+
+    // const defaultPipeline = new BABYLON.DefaultRenderingPipeline("default", true, scene, [rtsCamera]);
 
     // enable fxaa
-    defaultPipeline.fxaaEnabled = true;
+    // defaultPipeline.fxaaEnabled = true;
 
     // enable grain
     // defaultPipeline.grainEnabled = true;
@@ -140,17 +155,40 @@ class App {
     // add material
     const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
 
-    material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+    material.diffuseTexture = createDummyTexture(scene, 256, 256, new BABYLON.Color4(1, 0, 1, 1));
+
+    // TODO: add specular map to make only the water shiny
     material.specularColor = new BABYLON.Color3(0, 0, 0);
+
+    const sampler2DSize = 256;
+
+    const moisetureMapData = createNoise2DData(sampler2DSize, sampler2DSize, {
+      seed: 0,
+      scale: 0.5,
+      octaves: 2,
+      persistence: 0.2,
+      lacunarity: 3,
+      offsetX: 0,
+      offsetY: 0,
+      exponent: 1.5,
+      fudgeFactor: 1,
+    });
+
+    const moistureMap = createRawTextureFromNoise2DData(moisetureMapData, sampler2DSize, sampler2DSize, scene, "Moisture map");
+
+    const colorMap = createRawTextureFromColorMap(COLOR_MAPS.MOISTURE, sampler2DSize, sampler2DSize, scene, "Color map");
 
     const heightColorMaterialPlugin = new HeightColorMaterialPlugin(material);
 
     heightColorMaterialPlugin.isEnabled = true;
 
-    heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
     heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+    heightColorMaterialPlugin.setMoistureMap(moistureMap);
+    heightColorMaterialPlugin.setColorMap(colorMap);
 
     this.terrain = createTerrain(scene, material, settings);
+
+    rtsCameraInput.setBounds({ minX: -settings.terrainWidth / 2, maxX: settings.terrainWidth / 2, minZ: -settings.terrainWidth / 2, maxZ: settings.terrainWidth / 2 });
 
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
 
@@ -159,6 +197,28 @@ class App {
 
     shadowGenerator.addShadowCaster(this.terrain, true);
     shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
+
+    const createWater = () => {
+      // create water
+      const waterMaterial = new BABYLON.StandardMaterial("waterMaterial", scene);
+
+      waterMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.6);
+      waterMaterial.alpha = 0.95;
+
+      // make it shiny
+      waterMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      waterMaterial.specularPower = 64;
+
+      const water = BABYLON.MeshBuilder.CreateGround("water", { width: settings.terrainWidth, height: settings.terrainWidth }, scene);
+
+      water.position.y = settings.waterLevel ?? 1;
+
+      water.material = waterMaterial;
+
+      return water;
+    };
+
+    this.water = createWater();
 
     const reset = () => {
       const newSettings = { ...defaultSettings };
@@ -169,22 +229,29 @@ class App {
 
       setupGUI();
 
+      heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+      heightColorMaterialPlugin.setMoistureMap(moistureMap);
+      heightColorMaterialPlugin.setColorMap(colorMap);
+
       this.terrain?.dispose();
 
       this.terrain = createTerrain(scene, material, settings);
 
-      heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
-      heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
+      rtsCameraInput.setBounds({ minX: -settings.terrainWidth / 2, maxX: settings.terrainWidth / 2, minZ: -settings.terrainWidth / 2, maxZ: settings.terrainWidth / 2 });
 
       shadowGenerator.addShadowCaster(this.terrain, true);
       shadowGenerator.getShadowMap()?.renderList?.push(this.terrain);
 
+      this.water?.dispose();
+
+      this.water = createWater();
+
       // set camera to default settings
-      camera.alpha = defaultCameraSettings.alpha;
-      camera.beta = defaultCameraSettings.beta;
-      camera.radius = defaultCameraSettings.radius;
-      camera.setTarget(defaultCameraSettings.target.clone());
-      camera.setPosition(defaultCameraSettings.position.clone());
+      rtsCamera.alpha = DEFAULT_RTS_CAMERA_SETTINGS.alpha;
+      rtsCamera.beta = DEFAULT_RTS_CAMERA_SETTINGS.beta;
+      rtsCamera.radius = DEFAULT_RTS_CAMERA_SETTINGS.radius;
+      rtsCamera.setTarget(DEFAULT_RTS_CAMERA_SETTINGS.target.clone());
+      rtsCamera.setPosition(DEFAULT_RTS_CAMERA_SETTINGS.position.clone());
     };
 
     const setupGUI = () => {
@@ -194,18 +261,18 @@ class App {
 
       const folder = gui.addFolder("Terrain Settings");
 
-      folder.add(settings, "frequency", 1, 10).step(1);
+      folder.add(settings, "scale", 0.1, 10).step(0.1);
       folder.add(settings, "exponent", 1, 10).step(1);
       folder.add(settings, "octaves", 1, 10).step(1);
+      folder.add(settings, "lacunarity", 1, 10).step(1);
+      folder.add(settings, "persistence", 0.1, 1).step(0.1);
       folder.add(settings, "terrainWidth", 10, 100).step(10);
-      folder.add(settings, "terrainHeight", 1, 100).step(1);
+      folder.add(settings, "terrainHeight", 1, 20).step(1);
       folder.add(settings, "vertexCount", 10, 1000).step(10);
 
-      const colorsFolder = gui.addFolder("Colors");
+      const waterFolder = gui.addFolder("Water");
 
-      colorsFolder.addColor(settings, "lowColor");
-      colorsFolder.addColor(settings, "midColor");
-      colorsFolder.addColor(settings, "highColor");
+      waterFolder.add(settings, "waterLevel", 0, settings.terrainHeight).step(0.1);
 
       const lightFolder = gui.addFolder("Light");
 
@@ -225,17 +292,21 @@ class App {
       gui.onFinishChange((event) => {
         const { property } = event;
 
-        if (["frequency", "exponent", "octaves", "terrainWidth", "terrainHeight", "vertexCount"].includes(property)) {
+        if (["scale", "exponent", "octaves", "lacunarity", "persistence", "terrainWidth", "terrainHeight", "vertexCount"].includes(property)) {
           this.terrain?.dispose();
           this.terrain = createTerrain(scene, material, settings);
+
+          this.water?.dispose();
+          this.water = createWater();
         }
 
         if (property === "terrainHeight") {
           heightColorMaterialPlugin.setHeightRange(0, settings.terrainHeight);
         }
 
-        if (["lowColor", "midColor", "highColor"].includes(property)) {
-          heightColorMaterialPlugin.setColors(BABYLON.Color3.FromHexString(settings.lowColor), BABYLON.Color3.FromHexString(settings.midColor), BABYLON.Color3.FromHexString(settings.highColor));
+        if (property === "waterLevel") {
+          this.water?.dispose();
+          this.water = createWater();
         }
 
         if (property === "lightDirection") {
@@ -274,80 +345,37 @@ class App {
 
 new App();
 
-function createCamera(canvas: HTMLCanvasElement, scene: BABYLON.Scene) {
-  const camera = new BABYLON.ArcRotateCamera(
-    "Camera", // name
-    defaultCameraSettings.alpha, // alpha
-    defaultCameraSettings.beta, // beta
-    defaultCameraSettings.radius, // radius
-    defaultCameraSettings.target.clone(), // target
-    scene
-  );
+function nextPowerOfTwo(value: number, max = 2048): number {
+  value = Math.min(max, value);
 
-  // overwrite alpha, beta, radius
-  camera.setPosition(defaultCameraSettings.position);
+  let result = 2;
 
-  // attach camera to canvas
-  camera.attachControl(canvas, true);
-
-  camera.lowerBetaLimit = 0.1;
-  camera.upperBetaLimit = (Math.PI / 2) * 0.9;
-
-  camera.wheelPrecision = 25; // zoom sensitivity
-  camera.lowerRadiusLimit = 10; // minimum zoom
-  camera.upperRadiusLimit = 50; // maximum zoom
-
-  // remove default camera inputs
-  camera.inputs.remove(camera.inputs.attached.pointers);
-
-  const rotationInput = new BABYLON.ArcRotateCameraPointersInput();
-
-  rotationInput.buttons = [1]; // middle mouse button
-
-  camera.inputs.add(rotationInput);
-
-  // add custom control for right mouse button to move camera without changing rotation, zoom or y
-  const moveCameraInput = new MoveCameraInput(canvas, scene, {
-    bounds: { minX: -25, maxX: 25, minZ: -25, maxZ: 25 },
-  });
-
-  camera.inputs.add(moveCameraInput);
-
-  return camera;
-}
-
-function createHeightMap(frequency: number, exponent: number, octaves: number, vertexCount: number) {
-  const noises = [] as NoiseFunction2D[];
-
-  for (let i = 0; i < octaves; i++) {
-    noises.push(createNoise2D(alea("seed" + i)));
+  while (result < value) {
+    result *= 2;
   }
 
-  const heightmap = new Float32Array(vertexCount * vertexCount);
-
-  for (let y = 0; y < vertexCount; y++) {
-    for (let x = 0; x < vertexCount; x++) {
-      const nx = x / vertexCount - 0.5;
-      const ny = y / vertexCount - 0.5;
-
-      let height = calculateHeight(noises, frequency, nx, ny, octaves);
-
-      // normalize height
-      height = height / (1 + 1 / 2 + 1 / 4);
-
-      // apply exponent
-      // higher values make the terrain flatter
-      heightmap[y * vertexCount + x] = Math.pow(height, exponent);
-    }
-  }
-
-  return heightmap;
+  return Math.min(max, result);
 }
 
-function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, settings: CreateTerrainSettings): BABYLON.Mesh {
-  const { frequency, exponent, octaves, terrainWidth, terrainHeight, vertexCount } = settings;
+function createTerrain(scene: BABYLON.Scene, material: BABYLON.StandardMaterial, settings: CreateTerrainSettings): BABYLON.Mesh {
+  const { scale, exponent, octaves, lacunarity, persistence, terrainWidth, terrainHeight, vertexCount } = settings;
 
-  const heightMap = createHeightMap(frequency, exponent, octaves, vertexCount);
+  const heightMapWidth = nextPowerOfTwo(vertexCount),
+    heightMapHeight = nextPowerOfTwo(vertexCount);
+
+  const config = {
+    seed: 0,
+    scale: scale,
+    octaves,
+    lacunarity,
+    persistence,
+    offsetX: 0,
+    offsetY: 0,
+    exponent,
+    fudgeFactor: 1,
+  };
+
+  const heightMap = createNoise2DData(heightMapWidth, heightMapHeight, config);
 
   const terrain = new BABYLON.Mesh("terrain", scene);
 
@@ -357,31 +385,31 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
 
   for (let y = 0; y < vertexCount; y++) {
     for (let x = 0; x < vertexCount; x++) {
-      // map x and y to the actual vertex position taking into account the terrain width
-      const vertexX = map(x, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
-      const vertexY = map(y, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
+      const vertexX = MathUtils.mapLinear(x, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
+      const vertexY = MathUtils.mapLinear(y, 0, vertexCount - 1, -terrainWidth / 2, terrainWidth / 2);
 
-      // console.log("x", x, "y", y, "nx", vertexX, "ny", vertexY);
+      // get index in height map considering heightMapWidth, heightMapHeight (which is the same for now) and vertexCount
+      const index = Math.floor(MathUtils.mapLinear(y, 0, vertexCount - 1, 0, heightMapHeight - 1)) * heightMapWidth + Math.floor(MathUtils.mapLinear(x, 0, vertexCount - 1, 0, heightMapWidth - 1));
 
-      let height = heightMap[y * vertexCount + x];
+      let height = heightMap[index];
 
       const island = true;
 
       if (island) {
         // ensure water at the edges
-        const nx = map(Math.abs(vertexX), 0, terrainWidth / 2, 0, 1);
-        const ny = map(Math.abs(vertexY), 0, terrainWidth / 2, 0, 1);
+        const nx = MathUtils.mapLinear(Math.abs(vertexX), 0, terrainWidth / 2, 0, 1);
+        const ny = MathUtils.mapLinear(Math.abs(vertexY), 0, terrainWidth / 2, 0, 1);
 
         // Use a power function to create a more gradual transition
         const easeEdge = (value: number) => Math.pow(value, 3);
 
         const edgeFactor = easeEdge(Math.max(nx, ny));
 
-        height = lerp(height, 0, edgeFactor);
+        height = MathUtils.lerp(height, 0, edgeFactor);
       }
 
       // map height to terrainHeight
-      height = map(height, 0, 1, 0, terrainHeight);
+      height = MathUtils.mapLinear(height, 0, 1, 0, terrainHeight);
 
       // use a step function to make the terrain look more blocky with terraces
       // height = Math.floor(height * 3) / 3;
@@ -398,6 +426,15 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
 
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
 
+  // calculate UVs considering that this is a square terrain
+  const uvs: number[] = [];
+
+  for (let y = 0; y < vertexCount; y++) {
+    for (let x = 0; x < vertexCount; x++) {
+      uvs.push(x / (vertexCount - 1), y / (vertexCount - 1));
+    }
+  }
+
   const vertexData = new BABYLON.VertexData();
 
   // console.log(positions, indices, normals);
@@ -405,95 +442,24 @@ function createTerrain(scene: BABYLON.Scene, material: BABYLON.Material, setting
   vertexData.positions = positions;
   vertexData.indices = indices;
   vertexData.normals = normals;
+  vertexData.uvs = uvs;
 
   vertexData.applyToMesh(terrain);
 
-  // debug
-  // debugMesh(terrain, scene);
-
   // convert to flat shaded mesh
-  // terrain.convertToFlatShadedMesh();
+  terrain.convertToFlatShadedMesh();
 
   terrain.material = material;
+
+  const diffuseTexture = createRawTextureFromNoise2DData(heightMap, heightMapWidth, heightMapHeight, scene, "Height map");
+
+  if (material.diffuseTexture) {
+    material.diffuseTexture.dispose();
+  }
+
+  material.diffuseTexture = diffuseTexture;
 
   terrain.receiveShadows = true;
 
   return terrain;
 }
-
-function calculateHeight(noises: NoiseFunction2D[], frequency: number, nx: number, ny: number, octaves = 5) {
-  let height = 0;
-
-  for (let i = 0; i < octaves; i++) {
-    height += (1 / Math.pow(2, i)) * map(noises[i](Math.pow(2, i) * frequency * nx, Math.pow(2, i) * frequency * ny), -1, 1, 0, 1);
-  }
-
-  return height;
-}
-
-function debugMesh(mesh: BABYLON.Mesh, scene: BABYLON.Scene) {
-  const material = new BABYLON.StandardMaterial("terrainMaterial", scene);
-  material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-  mesh.material = material;
-
-  BABYLON.MeshDebugPluginMaterial.PrepareMeshForTrianglesAndVerticesMode(mesh);
-
-  new BABYLON.MeshDebugPluginMaterial(mesh.material as BABYLON.StandardMaterial, {
-    mode: BABYLON.MeshDebugMode.TRIANGLES,
-    wireframeTrianglesColor: new BABYLON.Color3(0, 0, 0),
-    wireframeThickness: 0.7,
-  });
-}
-
-function map(value: number, fromMin: number, fromMax: number, toMin: number, toMax: number): number {
-  return toMin + (toMax - toMin) * ((value - fromMin) / (fromMax - fromMin));
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function loadHeightMap(imageUrl: string, width: number, height: number, callback: (heightMap: Float32Array) => void) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  const img = new Image();
-
-  img.onload = () => {
-    // Set canvas dimensions to match the desired heightmap resolution
-    canvas.width = width;
-    canvas.height = height;
-
-    // Draw the image onto the canvas
-    ctx!.drawImage(img, 0, 0, width, height);
-
-    // Get pixel data from the canvas
-    const imageData = ctx!.getImageData(0, 0, width, height);
-    const pixels = imageData.data;
-
-    // Create a Float32Array to store normalized height values
-    const heights = new Float32Array(width * height);
-
-    // Loop through each pixel and calculate grayscale value
-    for (let i = 0; i < pixels.length; i += 4) {
-      // Extract RGB values (assuming the image is grayscale)
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-
-      // Calculate grayscale intensity (normalized to [0, 1])
-      const grayValue = (r + g + b) / (3 * 255);
-
-      // Store in the Float32Array
-      heights[i / 4] = grayValue;
-    }
-
-    callback(heights);
-  };
-
-  img.src = imageUrl;
-}
-
-// Example usage:
-loadHeightMap("img/heightmap.jpg", 256, 256, (heightMap) => {
-  console.log(heightMap); // Float32Array of normalized values
-});

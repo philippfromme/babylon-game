@@ -2,11 +2,9 @@ import * as BABYLON from "@babylonjs/core";
 
 export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBase {
   _isEnabled: boolean = false;
-  private _varColorName: string;
 
-  lowColor = new BABYLON.Color3(0.0, 0.0, 1.0);
-  midColor = new BABYLON.Color3(0.0, 1.0, 0.0);
-  highColor = new BABYLON.Color3(1.0, 0.0, 0.0);
+  moistureMap: BABYLON.Nullable<BABYLON.BaseTexture> = null;
+  colorMap: BABYLON.Nullable<BABYLON.BaseTexture> = null;
 
   minHeight = 0;
   maxHeight = 1;
@@ -18,8 +16,6 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
     super(material, "HeightColor", 100, {
       HeightColor: false,
     });
-
-    this._varColorName = material instanceof BABYLON.PBRBaseMaterial ? "finalColor" : "color";
 
     this._enable(true);
   }
@@ -37,15 +33,17 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
     this._enable(this._isEnabled);
   }
 
-  setColors(lowColor: BABYLON.Color3, midColor: BABYLON.Color3, highColor: BABYLON.Color3) {
-    this.lowColor.copyFrom(lowColor);
-    this.midColor.copyFrom(midColor);
-    this.highColor.copyFrom(highColor);
-  }
-
   setHeightRange(minHeight: number, maxHeight: number) {
     this.minHeight = minHeight;
     this.maxHeight = maxHeight;
+  }
+
+  setMoistureMap(moistureMap: BABYLON.Nullable<BABYLON.BaseTexture>) {
+    this.moistureMap = moistureMap;
+  }
+
+  setColorMap(colorMap: BABYLON.Nullable<BABYLON.BaseTexture>) {
+    this.colorMap = colorMap;
   }
 
   // Also, you should always associate a define with your plugin because the list of defines (and their values)
@@ -67,32 +65,29 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
   } {
     return {
       ubo: [
-        { name: "lowColor", size: 3, type: "vec3" },
-        { name: "midColor", size: 3, type: "vec3" },
-        { name: "highColor", size: 3, type: "vec3" },
         { name: "minHeight", size: 1, type: "float" },
         { name: "maxHeight", size: 1, type: "float" },
       ],
       fragment: `#ifdef HeightColor
-                    uniform vec3 lowColor;
-                    uniform vec3 midColor;
-                    uniform vec3 highColor;
-
                     uniform float minHeight;
                     uniform float maxHeight;
                 #endif`,
     };
   }
 
+  getSamplers(samplers: string[]) {
+    samplers.push("moistureMap");
+    samplers.push("colorMap");
+  }
+
   // whenever a material is bound to a mesh, we need to update the uniforms.
   // so bind our uniform variable to the actual color we have in the instance.
   bindForSubMesh(uniformBuffer: BABYLON.UniformBuffer, scene: BABYLON.Scene, engine: BABYLON.AbstractEngine, subMesh: BABYLON.SubMesh) {
     if (this._isEnabled) {
-      uniformBuffer.updateColor3("lowColor", this.lowColor);
-      uniformBuffer.updateColor3("midColor", this.midColor);
-      uniformBuffer.updateColor3("highColor", this.highColor);
       uniformBuffer.updateFloat("minHeight", this.minHeight);
       uniformBuffer.updateFloat("maxHeight", this.maxHeight);
+      uniformBuffer.setTexture("moistureMap", this.moistureMap);
+      uniformBuffer.setTexture("colorMap", this.colorMap);
     }
   }
 
@@ -118,29 +113,21 @@ export default class HeightColorMaterialPlugin extends BABYLON.MaterialPluginBas
   }> {
     if (shaderType === "fragment") {
       return {
-        CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
-                #ifdef HeightColor
-                    float height = vPositionW.y; // Assuming Y is the up axis
-                    float normalizedHeight = (height - minHeight) / (maxHeight - minHeight);
-                    vec3 colorResult;
+        CUSTOM_FRAGMENT_DEFINITIONS: `
+          uniform sampler2D moistureMap;
+          uniform sampler2D colorMap;
 
-                    if (normalizedHeight < 0.33) {
-                      float t = normalizedHeight / 0.33;
-                      colorResult = mix(lowColor, midColor, t);
-                    } else if (normalizedHeight < 0.66) {
-                      float t = (normalizedHeight - 0.33) / 0.33;
-                      colorResult = mix(midColor, highColor, t);
-                    } else {
-                      colorResult = highColor;
-                    }
+          vec4 computeBaseColor() {
+            float height = vPositionW.y;
 
-                    ${this._varColorName}.rgb *= colorResult;
-                #endif
-            `,
+            float normalizedHeight = (height - minHeight) / (maxHeight - minHeight);
 
-        "!diffuseBase\\+=info\\.diffuse\\*shadow;": `
-                diffuseBase += info.diffuse*shadow;
-            `,
+            float moisture = texture(moistureMap, vec2(vMainUV1.x, 1.0 - vMainUV1.y)).r;
+
+            return texture(colorMap, vec2(moisture, normalizedHeight));
+          }
+        `,
+        "!baseColor\\=texture2D\\(diffuseSampler,vDiffuseUV\\+uvOffset\\);": `baseColor = computeBaseColor();`,
       };
     }
 

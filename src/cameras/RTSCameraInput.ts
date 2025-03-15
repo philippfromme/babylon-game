@@ -1,10 +1,8 @@
 import * as BABYLON from "@babylonjs/core";
 
-import { AxesViewer } from "@babylonjs/core/Debug/axesViewer";
-
 type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 
-interface MoveCameraInputOptions {
+interface RTSCameraInputOptions {
   dragSpeed?: number;
   edgeScrollEnabled?: boolean;
   edgeScrollSpeed?: number;
@@ -12,7 +10,7 @@ interface MoveCameraInputOptions {
   bounds?: Bounds;
 }
 
-const DEFAULT_OPTIONS: Required<MoveCameraInputOptions> = {
+const DEFAULT_OPTIONS: Required<RTSCameraInputOptions> = {
   dragSpeed: 0.05,
   edgeScrollEnabled: false,
   edgeScrollSpeed: 0.7,
@@ -22,10 +20,10 @@ const DEFAULT_OPTIONS: Required<MoveCameraInputOptions> = {
 
 export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.ArcRotateCamera> {
   camera: BABYLON.Nullable<BABYLON.ArcRotateCamera>;
+  private _canvas: HTMLCanvasElement;
   private _scene: BABYLON.Scene;
   private _isDragging: boolean = false;
   private _previousPosition: { x: number; y: number } | null = null;
-  private _canvas: HTMLCanvasElement;
   private _dragSpeed: number;
   private _edgeScrollEnabled: boolean;
   private _edgeScrollSpeed: number;
@@ -33,9 +31,8 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
   private _cursorPosition: { x: number; y: number } = { x: 0, y: 0 };
   private _edgeScrollInterval: BABYLON.Nullable<number> = null;
   private _bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
-  // private _axesViewer?: AxesViewer;
 
-  constructor(canvas: HTMLCanvasElement, scene: BABYLON.Scene, options: MoveCameraInputOptions = {}) {
+  constructor(canvas: HTMLCanvasElement, scene: BABYLON.Scene, options: RTSCameraInputOptions = {}) {
     this.camera = null;
     this._scene = scene;
     this._canvas = canvas;
@@ -56,15 +53,14 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
   }
 
   getClassName() {
-    return "MoveCameraInput";
+    return "RTSCameraInput";
   }
 
   getSimpleName() {
-    return "moveCamera";
+    return "RTSCameraInput";
   }
 
   attachControl(noPreventDefault?: boolean): void {
-    // Attach pointer events for dragging
     this._scene.onPointerObservable.add((pointerInfo) => {
       if (!this.camera) return;
 
@@ -81,64 +77,67 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
       }
     });
 
-    // track mouse position for edge scrolling
     this._canvas.addEventListener("mousemove", (event) => {
       this._cursorPosition.x = event.clientX;
       this._cursorPosition.y = event.clientY;
     });
 
-    // start edge scrolling logic
     this._startEdgeScrolling();
-
-    // for debugging show axes at camera target
-    // if (this.camera) {
-    //   this._axesViewer = new AxesViewer(this._scene, 3);
-    //   this._axesViewer.update(
-    //     this.camera.target,
-    //     BABYLON.Vector3.Right(),
-    //     BABYLON.Vector3.Up(),
-    //     BABYLON.Vector3.Forward()
-    //   );
-    // }
   }
 
   detachControl(): void {
-    // clean up event listeners and intervals
     if (this._edgeScrollInterval !== null) {
       clearInterval(this._edgeScrollInterval);
+
       this._edgeScrollInterval = null;
     }
+
     this._canvas.removeEventListener("mousemove", () => {});
   }
 
-  checkInputs(): void {
-    // not needed for this implementation
-  }
+  checkInputs(): void {}
 
-  private _onPointerDown(pointerInfo: BABYLON.PointerInfo): void {
-    if (pointerInfo.event.button === 2) {
-      // prevent default right-click behavior
-      pointerInfo.event.preventDefault();
+  setBounds(bounds: Bounds): void {
+    this._bounds = bounds;
 
-      // right mouse button
-      this._isDragging = true;
-      this._previousPosition = {
-        x: pointerInfo.event.clientX,
-        y: pointerInfo.event.clientY,
-      };
+    if (this.camera) {
+      if (!this._isInBounds(this.camera.target)) {
+        this.camera.target = new BABYLON.Vector3(
+          Math.min(Math.max(this.camera.target.x, this._bounds.minX), this._bounds.maxX),
+          this.camera.target.y,
+          Math.min(Math.max(this.camera.target.z, this._bounds.minZ), this._bounds.maxZ)
+        );
+      }
     }
-  }
-
-  setEdgeScrollSpeed(speed: number): void {
-    this._edgeScrollSpeed = speed;
   }
 
   setDragSpeed(speed: number): void {
     this._dragSpeed = speed;
   }
 
+  setEdgeScrollSpeed(speed: number): void {
+    this._edgeScrollSpeed = speed;
+  }
+
   setEdgeThreshold(threshold: number): void {
     this._edgeThreshold = threshold;
+  }
+
+  private _isInBounds(position: BABYLON.Vector3): boolean {
+    return position.x >= this._bounds.minX && position.x <= this._bounds.maxX && position.z >= this._bounds.minZ && position.z <= this._bounds.maxZ;
+  }
+
+  private _onPointerDown(pointerInfo: BABYLON.PointerInfo): void {
+    if (pointerInfo.event.button === 2) {
+      pointerInfo.event.preventDefault();
+
+      this._isDragging = true;
+
+      this._previousPosition = {
+        x: pointerInfo.event.clientX,
+        y: pointerInfo.event.clientY,
+      };
+    }
   }
 
   private _onPointerMove(pointerInfo: BABYLON.PointerInfo): void {
@@ -147,19 +146,16 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
     const dx = pointerInfo.event.clientX - this._previousPosition.x;
     const dy = pointerInfo.event.clientY - this._previousPosition.y;
 
-    // calculate movement in world space
     const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
 
     const right = BABYLON.Vector3.Cross(forward, this.camera.upVector);
 
     let movement = right.scale(-dx * this._dragSpeed).add(forward.scale(-dy * this._dragSpeed));
 
-    // opposite direction
     movement = movement.scale(-1);
 
-    movement.y = 0; // keep movement in X-Z plane
+    movement.y = 0;
 
-    // update camera position
     if (this._isInBounds(this.camera.target.add(movement))) {
       this.camera.position.addInPlace(movement);
       this.camera.target.addInPlace(movement);
@@ -173,8 +169,8 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
 
   private _onPointerUp(pointerInfo: BABYLON.PointerInfo): void {
     if (pointerInfo.event.button === 2) {
-      // right mouse button
       this._isDragging = false;
+
       this._previousPosition = null;
     }
   }
@@ -184,14 +180,6 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
 
     this._edgeScrollInterval = window.setInterval(() => {
       if (!this._edgeScrollEnabled) return;
-      // console.log(this.camera?.position, this.camera?.target);
-
-      // this._axesViewer?.update(
-      //   this.camera!.target,
-      //   BABYLON.Vector3.Right(),
-      //   BABYLON.Vector3.Up(),
-      //   BABYLON.Vector3.Forward()
-      // );
 
       const { x, y } = this._cursorPosition;
 
@@ -206,18 +194,13 @@ export default class MoveCameraInput implements BABYLON.ICameraInput<BABYLON.Arc
         const right = BABYLON.Vector3.Cross(forward, this.camera!.upVector);
 
         const movement = right.scale(dx).add(forward.scale(dz));
-        movement.y = 0; // keep movement in X-Z plane
+        movement.y = 0;
 
-        // update camera position and target for panning effect
         if (this._isInBounds(this.camera!.target.add(movement))) {
           this.camera!.position.addInPlace(movement);
           this.camera!.target.addInPlace(movement);
         }
       }
     }, 16); // run at ~60 FPS (16ms interval)
-  }
-
-  private _isInBounds(position: BABYLON.Vector3): boolean {
-    return position.x >= this._bounds.minX && position.x <= this._bounds.maxX && position.z >= this._bounds.minZ && position.z <= this._bounds.maxZ;
   }
 }
