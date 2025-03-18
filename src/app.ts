@@ -2,6 +2,7 @@ import * as BABYLON from "@babylonjs/core";
 
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
+import { AxesViewer } from "@babylonjs/core/Debug/axesViewer";
 
 import { MathUtils } from "three";
 
@@ -219,6 +220,35 @@ class App {
     };
 
     this.water = createWater();
+
+    // create simple red sphere
+    const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 1 }, scene);
+
+    const sphereMaterial = new BABYLON.StandardMaterial("sphereMaterial", scene);
+
+    sphereMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0);
+
+    sphere.material = sphereMaterial;
+
+    sphere.isPickable = false;
+
+    function mousemovef() {
+      var pickResult = scene.pick(scene.pointerX, scene.pointerY);
+
+      if (pickResult.hit) {
+        if (pickResult.pickedMesh?.name === "water") {
+          sphere.isVisible = false;
+        } else {
+          sphere.isVisible = true;
+
+          sphere.position = pickResult.pickedPoint!;
+        }
+      }
+    }
+
+    scene.onPointerMove = function () {
+      mousemovef();
+    };
 
     const reset = () => {
       const newSettings = { ...defaultSettings };
