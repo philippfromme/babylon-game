@@ -19,18 +19,12 @@ export default class RTSCameraInput implements BABYLON.ICameraInput<BABYLON.Univ
   private _canvas: HTMLCanvasElement;
   private _scene: BABYLON.Scene;
 
-  constructor(canvas: HTMLCanvasElement, scene: BABYLON.Scene, options: FPSCameraInputOptions) {
+  constructor(canvas: HTMLCanvasElement, scene: BABYLON.Scene, options: FPSCameraInputOptions = {}) {
     this.camera = null;
     this._scene = scene;
     this._canvas = canvas;
 
-    if (options.lockPointer) {
-      canvas!.addEventListener("mousemove", () => {
-        if (!document.pointerLockElement) {
-          canvas!.requestPointerLock();
-        }
-      });
-    }
+    options = { ...DEFAULT_OPTIONS, ...options };
   }
 
   getClassName(): string {
@@ -44,4 +38,12 @@ export default class RTSCameraInput implements BABYLON.ICameraInput<BABYLON.Univ
   attachControl(noPreventDefault?: boolean): void {}
 
   detachControl(): void {}
+
+  lockPointer() {
+    this._canvas.addEventListener("mousemove", () => {
+      if (!document.pointerLockElement) {
+        this._canvas.requestPointerLock();
+      }
+    });
+  }
 }

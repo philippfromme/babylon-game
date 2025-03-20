@@ -13,6 +13,9 @@ import { createRawTextureFromNoise2DData } from "./materials/fromNoise";
 import { createRTSCamera, DEFAULT_RTS_CAMERA_SETTINGS } from "./cameras/RTSCamera";
 import RTSCameraInput from "./cameras/RTSCameraInput";
 
+import { createFPSCamera } from "./cameras/FPSCamera";
+import FPSCameraInput from "./cameras/FPSCameraInput";
+
 import HeightColorMaterialPlugin from "./materials/HeightColorMaterialPlugin";
 
 import { createNoise2DData } from "./utils/noise";
@@ -131,6 +134,10 @@ class App {
 
     const rtsCameraInput = rtsCamera.inputs.attached["RTSCameraInput"] as RTSCameraInput;
 
+    const fpsCamera = createFPSCamera(canvas, scene);
+
+    const fpsCameraInput = fpsCamera.inputs.attached["FPSCameraInput"] as FPSCameraInput;
+
     // const defaultPipeline = new BABYLON.DefaultRenderingPipeline("default", true, scene, [rtsCamera]);
 
     // enable fxaa
@@ -236,7 +243,7 @@ class App {
       var pickResult = scene.pick(scene.pointerX, scene.pointerY);
 
       if (pickResult.hit) {
-        if (pickResult.pickedMesh?.name === "water") {
+        if (pickResult.pickedMesh?.name === "water" || scene.activeCamera === fpsCamera) {
           sphere.isVisible = false;
         } else {
           sphere.isVisible = true;
@@ -248,6 +255,24 @@ class App {
 
     scene.onPointerMove = function () {
       mousemovef();
+    };
+
+    scene.onPointerDown = function () {
+      if (sphere.isVisible) {
+        const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+
+        if (pickResult.hit) {
+          fpsCamera.position = pickResult.pickedPoint!.add(new BABYLON.Vector3(0, 1, 0));
+
+          rtsCamera.detachControl();
+
+          fpsCameraInput.attachControl();
+
+          scene.activeCamera = fpsCamera;
+
+          fpsCameraInput.lockPointer();
+        }
+      }
     };
 
     const reset = () => {
